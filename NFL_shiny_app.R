@@ -11,6 +11,7 @@ pbp         <- readRDS("data/pbp2018.rds")
 games       <- readRDS("data/games2018.rds")
 
 
+
 # enrichData------------
 
 # add the week and final score data to the play-by-play
@@ -63,7 +64,7 @@ ui <- dashboardPage(
                        ),
 
                 column(width = 6,
-                       box(plotOutput(outputId = "scoreEvolPlot"),width = NULL, title = "Score Difference"),
+                       box(plotOutput(outputId = "fieldPosPlot"),width = NULL, title = "Field Position Evolution"),
                        box(plotOutput(outputId = "winPercPlot"),width = NULL, title = "Win % by Team")
                        )
 
@@ -177,6 +178,7 @@ server <- function(input, output) {
     score_timeline <- pbp %>% filter(week == as.numeric(input$inputWeek)) %>% filter(HomeTeam == input$inputTeam | AwayTeam == input$inputTeam)
     
     #compute the time (secs) through the game
+    score_timeline$TimeSecs <- na.locf(score_timeline$TimeSecs)
     score_timeline$Game.time.total <- max(score_timeline$TimeSecs) - score_timeline$TimeSecs
     
     #LOCF the abs score diff
@@ -215,6 +217,7 @@ server <- function(input, output) {
     win_perc_timeline <- pbp %>% filter(week == as.numeric(input$inputWeek)) %>% filter(HomeTeam == input$inputTeam | AwayTeam == input$inputTeam)
     
     #compute the time (secs) through the game
+    win_perc_timeline$TimeSecs <- na.locf(win_perc_timeline$TimeSecs)
     win_perc_timeline$Game.time.total <- max(win_perc_timeline$TimeSecs) - win_perc_timeline$TimeSecs
     
     #get the data in tall format to plot
@@ -231,6 +234,61 @@ server <- function(input, output) {
       geom_vline(xintercept = 60*60, linetype="dotted", color = "grey", size = 1.5) +
       xlab("Game time (secs)") + ylab("Win %") +
       theme(legend.position="right")
+    
+  })
+  
+  # --------------------------------
+  # Plot the field position
+  # --------------------------------
+  output$fieldPosPlot <- renderPlot({
+    
+    #get the data
+    field_pos <- pbp %>% filter(week == as.numeric(input$inputWeek)) %>% filter(HomeTeam == input$inputTeam | AwayTeam == input$inputTeam)
+    
+    #compute game time seconds counting up
+    field_pos$TimeSecs <- na.locf(field_pos$TimeSecs)
+    field_pos$Game.time.total <- max(field_pos$TimeSecs) - field_pos$TimeSecs
+    
+    field_pos <- field_pos[field_pos$posteam != "" & !is.na(field_pos$posteam),]
+    
+    field_pos$yrdline100 <- mapply(
+      function(team, line){
+        if(field_pos$HomeTeam[1] == team) return(line)
+        else return(100-line)
+      },
+      field_pos$SideofField,
+      field_pos$yrdln
+    )
+    
+    field_pos$TeamPos <- mapply(
+      function(posteam){
+        if(posteam == field_pos$HomeTeam[1]) return(posteam)
+        else return(field_pos$AwayTeam[1])
+      },
+      field_pos$posteam
+    )
+    
+    pick_six   <- field_pos %>% filter(!is.na(Interceptor)& Touchdown == 1) 
+    field_goal <- field_pos %>% filter(!is.na(FieldGoalResult)) %>% filter(FieldGoalResult == "Good")
+    
+    home_col <- "#00AFBB" 
+    away_col <- "#E7B800" 
+    
+    ggplot(data = field_pos, aes(y = Game.time.total, x = yrdline100)) + 
+      scale_color_manual(values = c(home_col, away_col)) +
+      geom_path( color = "grey") + 
+      geom_point(aes(size = Touchdown == 1, color = TeamPos)) +
+      geom_text(data = field_pos[field_pos$Touchdown == 1 & is.na(field_pos$Interceptor),], label = "TD",nudge_y = -125, size = 5)+
+      geom_point(data = pick_six, color = "black", size = 4) +
+      geom_text(data = pick_six, label = "p6", color = "red", size = 5, nudge_y = -125) +
+      geom_point(data = field_goal, color = "black", size = 4, shape = 10) +
+      geom_text(data = field_goal, label = "FG", size = 3,nudge_y = -100) +
+      xlab("Yard Line (LHS Home Team)") + ylab("Game Time (Secs)") +
+      theme(panel.background = element_rect(fill = alpha("green",0.2), size = 2, linetype = "solid"),
+            axis.line = element_line(color = home_col, size = 3),
+            panel.border = element_rect(colour = away_col, fill = NA, size=3))
+      
+
     
   })
   
