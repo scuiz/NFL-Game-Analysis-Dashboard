@@ -1,6 +1,9 @@
 # NFL Game Analysis Dashboard
 Play by play analysis dashboard for all regular season games in the NFL 2018 season.
 
+Deployed at:
+https://scuiz.shinyapps.io/NFLGameAnalysis/
+
 Offense Page
 
 <img src="offensePage.png" width = "1000">
